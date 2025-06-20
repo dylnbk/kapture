@@ -8,7 +8,7 @@ import { Download, ExternalLink, Trash2, Play, FileText, Clock, AlertTriangle, A
 import { MediaDownload } from "@/types/downloads";
 import { formatDistanceToNow, format } from "date-fns";
 import Image from "next/image";
-import { useDeleteDownload, useBulkDownloadDelete, useArchiveDownload } from "@/hooks/use-downloads";
+import { useDeleteDownload, useBulkDownloadDelete, useArchiveDownload, useBulkDownloadArchive } from "@/hooks/use-downloads";
 import { useState } from "react";
 
 interface DownloadHistoryProps {
@@ -260,8 +260,9 @@ function DownloadCard({ download }: { download: MediaDownload }) {
 export function DownloadHistory({ downloads }: DownloadHistoryProps) {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const bulkDeleteMutation = useBulkDownloadDelete();
+  const bulkArchiveMutation = useBulkDownloadArchive();
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
-  const [showClearAllDialog, setShowClearAllDialog] = useState(false);
+  const [showBulkArchiveDialog, setShowBulkArchiveDialog] = useState(false);
 
   const sortedDownloads = [...downloads].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -286,15 +287,34 @@ export function DownloadHistory({ downloads }: DownloadHistoryProps) {
     setShowBulkDeleteDialog(false);
   };
 
-  const handleClearAll = () => {
-    setShowClearAllDialog(true);
+  const handleBulkArchive = () => {
+    if (selectedItems.length === 0) return;
+    setShowBulkArchiveDialog(true);
   };
 
-  const handleClearAllConfirm = () => {
-    bulkDeleteMutation.mutate(downloads.map(d => d.id));
+  const handleBulkArchiveConfirm = () => {
+    bulkArchiveMutation.mutate(selectedItems);
     setSelectedItems([]);
-    setShowClearAllDialog(false);
+    setShowBulkArchiveDialog(false);
   };
+
+  const handleDeleteAll = () => {
+    setSelectedItems(downloads.map(d => d.id));
+    setShowBulkDeleteDialog(true);
+  };
+
+  const handleArchiveAll = () => {
+    setSelectedItems(downloads.map(d => d.id));
+    setShowBulkArchiveDialog(true);
+  };
+
+  // Filter downloads that can be archived (completed and not already archived)
+  const archivableDownloads = downloads.filter(d =>
+    d.downloadStatus === 'completed' && !d.keepFile
+  );
+  const selectedArchivableCount = selectedItems.filter(id =>
+    archivableDownloads.some(d => d.id === id)
+  ).length;
 
   return (
     <div className="space-y-4">
@@ -311,29 +331,59 @@ export function DownloadHistory({ downloads }: DownloadHistoryProps) {
                 {selectedItems.length === downloads.length ? 'Deselect All' : 'Select All'}
               </Button>
               
-              {selectedItems.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleBulkDelete}
-                  disabled={bulkDeleteMutation.isPending}
-                  className="text-light-error dark:text-dark-error"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Selected ({selectedItems.length})
-                </Button>
+              {selectedItems.length > 0 && selectedItems.length < downloads.length && (
+                <>
+                  {selectedArchivableCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleBulkArchive}
+                      disabled={bulkArchiveMutation.isPending}
+                      className="text-blue-600 dark:text-blue-400"
+                    >
+                      <Archive className="h-4 w-4 mr-2" />
+                      Archive Selected ({selectedArchivableCount})
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleteMutation.isPending}
+                    className="text-light-error dark:text-dark-error"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Selected ({selectedItems.length})
+                  </Button>
+                </>
               )}
               
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClearAll}
-                disabled={bulkDeleteMutation.isPending}
-                className="text-light-error dark:text-dark-error"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Clear All
-              </Button>
+              {selectedItems.length === downloads.length && downloads.length > 0 && (
+                <>
+                  {archivableDownloads.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleArchiveAll}
+                      disabled={bulkArchiveMutation.isPending}
+                      className="text-blue-600 dark:text-blue-400"
+                    >
+                      <Archive className="h-4 w-4 mr-2" />
+                      Archive All
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDeleteAll}
+                    disabled={bulkDeleteMutation.isPending}
+                    className="text-light-error dark:text-dark-error"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete All
+                  </Button>
+                </>
+              )}
             </>
           )}
         </div>
@@ -375,14 +425,14 @@ export function DownloadHistory({ downloads }: DownloadHistoryProps) {
       />
 
       <ConfirmDialog
-        open={showClearAllDialog}
-        onOpenChange={setShowClearAllDialog}
-        title="Clear All Downloads"
-        description={`Are you sure you want to delete all ${downloads.length} downloads? This action cannot be undone.`}
-        onConfirm={handleClearAllConfirm}
-        confirmText="Delete All"
-        variant="destructive"
-        isLoading={bulkDeleteMutation.isPending}
+        open={showBulkArchiveDialog}
+        onOpenChange={setShowBulkArchiveDialog}
+        title="Archive Downloads"
+        description={`Are you sure you want to archive ${selectedArchivableCount > 0 ? selectedArchivableCount : selectedItems.length} download${(selectedArchivableCount > 0 ? selectedArchivableCount : selectedItems.length) > 1 ? 's' : ''}? This will move them to your permanent library.`}
+        onConfirm={handleBulkArchiveConfirm}
+        confirmText="Archive"
+        variant="default"
+        isLoading={bulkArchiveMutation.isPending}
       />
     </div>
   );

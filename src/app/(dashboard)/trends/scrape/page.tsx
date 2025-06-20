@@ -15,7 +15,7 @@ export default async function TrendsScrapePage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Create Scraper</h1>
           <p className="text-muted-foreground">
-            Set up a scraper to collect content from keywords, hashtags, or specific URLs.
+            By default we scrape popular social media platforms such as Instagram, TikTok, Facebook, X, and Reddit for content related to your keywords and hashtags. You can also provide custom URLs, posts and profiles to be included.
           </p>
         </div>
         

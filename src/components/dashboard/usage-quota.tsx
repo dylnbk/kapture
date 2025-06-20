@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Crown, TrendingUp, Download, Zap } from "lucide-react";
+import { Crown, ScanSearch, Download, Zap } from "lucide-react";
 import Link from "next/link";
 
 interface UsageQuotaProps {
@@ -61,8 +61,8 @@ export function UsageQuota({ plan, usage }: UsageQuotaProps) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Trend Scrapes</span>
+                <ScanSearch className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Scrapes</span>
               </div>
               <span className="text-sm text-muted-foreground">
                 {usage.scrapes.current}/{usage.scrapes.limit}
@@ -84,7 +84,7 @@ export function UsageQuota({ plan, usage }: UsageQuotaProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Download className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Media Downloads</span>
+                <span className="text-sm font-medium">Downloads</span>
               </div>
               <span className="text-sm text-muted-foreground">
                 {usage.downloads.current}/{usage.downloads.limit}
@@ -120,17 +120,12 @@ export function UsageQuota({ plan, usage }: UsageQuotaProps) {
 
         {/* Upgrade CTA */}
         {plan === "free" && (
-          <div className="pt-4 border-t border-border">
-            <div className="text-center space-y-2">
-              <p className="text-sm text-muted-foreground">
-                Unlock unlimited AI generations and more
-              </p>
+          <div className="border-border">
               <Link href="/billing">
                 <Button className="w-full">
                   Upgrade to Pro
                 </Button>
               </Link>
-            </div>
           </div>
         )}
 

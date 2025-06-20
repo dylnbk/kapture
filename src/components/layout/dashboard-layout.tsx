@@ -22,7 +22,7 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
       <Header user={user} isCollapsed={isSidebarCollapsed} />
       <div className="flex">
         <Sidebar isCollapsed={isSidebarCollapsed} onToggle={toggleSidebar} />
-        <main className={`flex-1 transition-all duration-300 pt-0 ${
+        <main className={`flex-1 transition-all duration-300 ${
           isSidebarCollapsed ? "ml-16" : "ml-64"
         }`}>
           {children}

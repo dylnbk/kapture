@@ -4,7 +4,7 @@ import { StatsCard } from "@/components/dashboard/stats-card";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { UsageQuota } from "@/components/dashboard/usage-quota";
-import { TrendingUp, Download, Zap, Lightbulb } from "lucide-react";
+import { ScanSearch, Download, Zap, Lightbulb } from "lucide-react";
 
 export default async function DashboardPage() {
   // User is already synced by layout, just get current user
@@ -35,22 +35,19 @@ export default async function DashboardPage() {
         <h1 className="text-3xl font-bold text-light-text-primary dark:text-dark-text-primary">
           Welcome back, {user.name || "Creator"}!
         </h1>
-        <p className="text-light-text-secondary dark:text-dark-text-secondary">
-          Your content creation dashboard
-        </p>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatsCard
-          title="Trends Scraped"
+          title="Scraped"
           value={stats.trendsScraped}
           subtitle="This month"
-          icon={TrendingUp}
+          icon={ScanSearch}
           trend={{ value: 0, isPositive: true }}
         />
         <StatsCard
-          title="Media Downloads"
+          title="Downloads"
           value={stats.mediaDownloads}
           subtitle="This month"
           icon={Download}

@@ -119,6 +119,56 @@ async function handlePOST(req: NextRequest, data: any, user: any) {
   }
 }
 
+async function handlePOSTBulkAction(req: NextRequest, user: any) {
+  try {
+    const body = await req.json();
+    const { action, ids } = body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return createInternalServerError('No download IDs provided');
+    }
+
+    if (action !== 'archive') {
+      return createInternalServerError('Invalid action specified');
+    }
+
+    // Get downloads from database to check ownership and status
+    const downloads = await db.mediaDownload.findMany({
+      where: {
+        id: { in: ids },
+        userId: user.id, // Ensure user owns all downloads
+        downloadStatus: 'completed', // Only allow archiving completed downloads
+        keepFile: false, // Only allow archiving downloads that aren't already archived
+      },
+    });
+
+    if (downloads.length === 0) {
+      return createInternalServerError('No eligible downloads found for archiving');
+    }
+
+    // Archive downloads by setting keepFile to true
+    const updateResult = await db.mediaDownload.updateMany({
+      where: {
+        id: { in: downloads.map(d => d.id) },
+        userId: user.id,
+      },
+      data: {
+        keepFile: true,
+        fileCleanupAt: null, // Remove any cleanup date
+      },
+    });
+
+    return createSuccessResponse({
+      message: `${updateResult.count} downloads archived successfully`,
+      archivedCount: updateResult.count,
+      requestedCount: ids.length,
+    });
+  } catch (error) {
+    console.error('Bulk archive downloads error:', error);
+    return createInternalServerError('Failed to archive downloads');
+  }
+}
+
 async function handleDELETE(req: NextRequest, user: any) {
   try {
     const body = await req.json();
@@ -173,12 +223,23 @@ async function handleDELETE(req: NextRequest, user: any) {
   }
 }
 
+// Handle both bulk download requests and bulk actions
+async function handlePOSTRoute(req: NextRequest, user: any) {
+  // Clone the request to read body multiple times
+  const clonedReq = req.clone();
+  const body = await req.json();
+  
+  // Check if this is a bulk action request
+  if (body.action) {
+    return handlePOSTBulkAction(clonedReq, user);
+  }
+  
+  // Otherwise, handle as bulk download request with validation
+  return withValidation(bulkDownloadSchema)(handlePOST)(clonedReq, body, user);
+}
+
 export const POST = withErrorHandling(
-  withAuth(
-    withUsageValidation('download')(
-      withValidation(bulkDownloadSchema)(handlePOST)
-    )
-  )
+  withAuth(handlePOSTRoute)
 );
 
 export const DELETE = withErrorHandling(withAuth(handleDELETE));

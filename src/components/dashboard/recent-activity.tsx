@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, TrendingUp, Download, Lightbulb, ExternalLink } from "lucide-react";
+import { Clock, ScanSearch, Download, Lightbulb, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ActivityItem {
@@ -44,21 +44,12 @@ const mockActivities: ActivityItem[] = [
     timestamp: "12 minutes ago",
     status: "completed",
   },
-  {
-    id: "4",
-    type: "trend",
-    title: "TikTok Trends Scraped",
-    description: "Found 8 trending videos in Lifestyle niche",
-    timestamp: "1 hour ago",
-    status: "completed",
-    metadata: { platform: "TikTok" },
-  },
 ];
 
 function getActivityIcon(type: ActivityItem["type"]) {
   switch (type) {
     case "trend":
-      return TrendingUp;
+      return ScanSearch;
     case "download":
       return Download;
     case "ai_generation":
@@ -124,7 +115,7 @@ export function RecentActivity() {
                   <p className="text-sm text-muted-foreground">
                     {activity.description}
                   </p>
-                  <div className="flex items-center mt-1 space-x-2">
+                  <div className="flex items-center mt-2 space-x-2">
                     <Clock className="h-3 w-3 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">
                       {activity.timestamp}

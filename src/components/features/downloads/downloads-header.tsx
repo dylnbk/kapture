@@ -15,19 +15,21 @@ interface DownloadsHeaderProps {
 export function DownloadsHeader({ queueItems: externalQueueItems = [] }: DownloadsHeaderProps = {}) {
   const [url, setUrl] = useState("");
   const [fileType, setFileType] = useState<'video' | 'audio' | 'image' | undefined>(undefined);
-  const [activeDownloads, setActiveDownloads] = useState<{url: string, id?: string}[]>([]);
+  const [activeDownloads, setActiveDownloads] = useState<{url: string, id?: string, timestamp: number}[]>([]);
   const downloadMutation = useDownloadRequest();
+  const { data: realQueueItems = [] } = useDownloadsQueue();
   
-  // Use external queue items if provided, otherwise use hook
-  const queueItems = externalQueueItems.length > 0 ? externalQueueItems : [];
+  // Use real queue items from hook to determine actual active downloads
+  const queueItems = externalQueueItems.length > 0 ? externalQueueItems : realQueueItems;
 
   const handleDownload = async () => {
     if (!url.trim()) return;
 
     const downloadUrl = url.trim();
+    const timestamp = Date.now();
     
     // Add to active downloads immediately for visual feedback
-    setActiveDownloads(prev => [...prev, { url: downloadUrl }]);
+    setActiveDownloads(prev => [...prev, { url: downloadUrl, timestamp }]);
 
     try {
       const response = await downloadMutation.mutateAsync({
@@ -51,6 +53,41 @@ export function DownloadsHeader({ queueItems: externalQueueItems = [] }: Downloa
       console.error('Download request failed:', error);
     }
   };
+
+  // Auto-cleanup activeDownloads based on actual queue state and time
+  React.useEffect(() => {
+    const cleanup = () => {
+      const now = Date.now();
+      const fiveMinutesAgo = now - (5 * 60 * 1000); // 5 minutes
+      
+      setActiveDownloads(prev => {
+        const cleaned = prev.filter(activeDownload => {
+          // Remove if older than 5 minutes (likely stale)
+          if (activeDownload.timestamp < fiveMinutesAgo) {
+            console.log('Removing stale download:', activeDownload);
+            return false;
+          }
+          
+          // Remove if this download ID is no longer in the queue
+          if (activeDownload.id && !queueItems.some(q => q.id === activeDownload.id)) {
+            console.log('Removing completed download:', activeDownload);
+            return false;
+          }
+          
+          return true;
+        });
+        
+        return cleaned;
+      });
+    };
+
+    // Run cleanup every 30 seconds
+    const interval = setInterval(cleanup, 30000);
+    // Also run cleanup immediately when queue changes
+    cleanup();
+    
+    return () => clearInterval(interval);
+  }, [queueItems]);
 
   // Function to remove completed downloads - will be called from parent
   const removeActiveDownload = (urlOrId: string) => {
@@ -134,15 +171,45 @@ export function DownloadsHeader({ queueItems: externalQueueItems = [] }: Downloa
         </div>
       </Card>
 
-      {/* Simple Download Status - Only show if no queue items */}
-      {activeDownloads.length > 0 && queueItems.length === 0 && (
+      {/* Simple Download Status - Only show if we have active downloads that aren't in the queue yet */}
+      {(() => {
+        // Filter activeDownloads to only those that aren't already in the queue
+        const pendingDownloads = activeDownloads.filter(activeDownload => {
+          // If it has an ID, check if it's in the queue
+          if (activeDownload.id) {
+            return !queueItems.some(q => q.id === activeDownload.id);
+          }
+          // If no ID yet, it's likely still being processed
+          return true;
+        });
+        
+        // Only show if we have pending downloads and they're recent (less than 2 minutes old)
+        const recentPendingDownloads = pendingDownloads.filter(d => {
+          const twoMinutesAgo = Date.now() - (2 * 60 * 1000);
+          return d.timestamp > twoMinutesAgo;
+        });
+        
+        return recentPendingDownloads.length > 0 && queueItems.length === 0;
+      })() && (
         <Card variant="glass" className="p-3">
           <div className="flex items-center space-x-3">
             <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
             <span className="text-sm text-light-text-secondary dark:text-dark-text-secondary">
-              {activeDownloads.length === 1
-                ? 'Download in progress...'
-                : `${activeDownloads.length} downloads in progress...`}
+              {(() => {
+                const pendingCount = activeDownloads.filter(activeDownload => {
+                  if (activeDownload.id) {
+                    return !queueItems.some(q => q.id === activeDownload.id);
+                  }
+                  return true;
+                }).filter(d => {
+                  const twoMinutesAgo = Date.now() - (2 * 60 * 1000);
+                  return d.timestamp > twoMinutesAgo;
+                }).length;
+                
+                return pendingCount === 1
+                  ? 'Download in progress...'
+                  : `${pendingCount} downloads in progress...`;
+              })()}
             </span>
           </div>
         </Card>

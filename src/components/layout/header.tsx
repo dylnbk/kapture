@@ -14,7 +14,7 @@ export function Header({ user, isCollapsed }: HeaderProps) {
   const { theme, setTheme } = useTheme();
 
   return (
-    <header className="h-16 border-b border-border bg-background/80 backdrop-blur-md">
+    <header className="sticky top-0 z-50 h-16 border-b border-border bg-background/80 backdrop-blur-md">
       <div className="flex items-center justify-between h-full px-6">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold text-foreground">

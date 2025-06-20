@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LucideIcon, TrendingUp, Download, Lightbulb, ArrowRight } from "lucide-react";
+import { LucideIcon, ScanSearch, Download, Lightbulb, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 interface QuickActionProps {
@@ -49,9 +49,9 @@ function QuickActionCard({ title, description, icon: Icon, href, buttonText, col
 export function QuickActions() {
   const actions = [
     {
-      title: "Discover Trends",
+      title: "Scrape the web",
       description: "Find trending content in your niche",
-      icon: TrendingUp,
+      icon: ScanSearch,
       href: "/trends",
       buttonText: "Start Scraping",
       color: "blue" as const,
@@ -76,9 +76,6 @@ export function QuickActions() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold text-light-text-primary dark:text-dark-text-primary">
-        Quick Actions
-      </h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {actions.map((action) => (
           <QuickActionCard key={action.title} {...action} />

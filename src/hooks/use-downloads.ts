@@ -416,6 +416,47 @@ export function useBulkDownloadDelete() {
   });
 }
 
+// Hook for bulk archive operations
+export function useBulkDownloadArchive() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation<void, Error, string[]>({
+    mutationFn: async (downloadIds: string[]) => {
+      const response = await fetch(`${API_BASE}/bulk`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'archive',
+          ids: downloadIds
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to archive downloads');
+      }
+    },
+    onSuccess: (_, downloadIds) => {
+      queryClient.invalidateQueries({ queryKey: ['downloads'] });
+      queryClient.invalidateQueries({ queryKey: ['library'] });
+      toast({
+        title: "Downloads Archived",
+        description: `${downloadIds.length} downloads have been moved to your library.`,
+        variant: "default",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Bulk Archive Failed",
+        description: error.message || "Failed to archive downloads. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+}
+
 // Hook to retry a failed download
 export function useRetryDownload() {
   const queryClient = useQueryClient();
