@@ -18,6 +18,26 @@ export interface MediaDownload {
   updatedAt: string;
 }
 
+export interface DownloadPhase {
+  name: string;
+  status: 'pending' | 'active' | 'completed' | 'failed';
+  progress?: number;
+  message?: string;
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface DownloadProgress {
+  percentage: number;
+  speed?: string;
+  eta?: string;
+  downloadedBytes?: number;
+  totalBytes?: number;
+  totalSize?: string;
+  currentPhase?: string;
+  phases?: DownloadPhase[];
+}
+
 export interface DownloadQueueItem {
   id: string;
   url: string;
@@ -25,6 +45,7 @@ export interface DownloadQueueItem {
   platform?: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   progress?: number;
+  detailedProgress?: DownloadProgress;
   error?: string;
   createdAt: string;
 }

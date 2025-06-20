@@ -46,8 +46,18 @@ function DownloadCard({ download }: { download: MediaDownload }) {
     }
   };
 
-  const formatFileSize = (bytes?: number) => {
-    if (!bytes) return "Unknown size";
+  const formatFileSize = (download: MediaDownload) => {
+    // Try multiple sources for file size
+    const fileSize = download.fileSize ||
+                    download.metadata?.fileSize ||
+                    download.metadata?.detailedProgress?.totalBytes ||
+                    download.metadata?.size;
+                    
+    if (!fileSize) return "Unknown size";
+    
+    const bytes = typeof fileSize === 'string' ? parseInt(fileSize) : fileSize;
+    if (!bytes || isNaN(bytes)) return "Unknown size";
+    
     const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + " " + sizes[i];
@@ -76,6 +86,23 @@ function DownloadCard({ download }: { download: MediaDownload }) {
 
   const handleArchive = () => {
     archiveMutation.mutate(download.id);
+  };
+
+  const handleCompleteDownload = async (downloadId: string) => {
+    try {
+      const response = await fetch(`/api/downloads/${downloadId}/complete`, {
+        method: 'POST',
+      });
+      
+      if (response.ok) {
+        // Force refresh the page to show updated status
+        window.location.reload();
+      } else {
+        console.error('Failed to complete download');
+      }
+    } catch (error) {
+      console.error('Error completing download:', error);
+    }
   };
 
   return (
@@ -147,7 +174,7 @@ function DownloadCard({ download }: { download: MediaDownload }) {
 
             {/* Metadata */}
             <div className="flex items-center space-x-4 text-sm text-light-text-secondary dark:text-dark-text-secondary mb-3 flex-wrap">
-              <span>{formatFileSize(download.fileSize)}</span>
+              <span>{formatFileSize(download)}</span>
               {formatDuration(download.duration) && (
                 <span>{formatDuration(download.duration)}</span>
               )}

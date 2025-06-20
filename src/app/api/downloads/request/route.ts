@@ -51,6 +51,7 @@ async function handlePOST(req: NextRequest, data: any, user: any) {
         storageKey: '', // Will be updated when download completes
         fileType: fileType || 'video',
         downloadStatus: 'pending',
+        keepFile: false, // Explicitly set to false for queue visibility
         duration: extractedMetadata.duration || null,
         metadata: {
           ...extractedMetadata,

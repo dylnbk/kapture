@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MediaDownload, DownloadQueueItem } from '@/types/downloads';
 import { useToast } from '@/hooks/use-toast';
+import { progressStorageService } from '@/services/progress-storage-service';
 
 const API_BASE = '/api/downloads';
 
@@ -193,18 +194,19 @@ export function useDownloadsQueue() {
   return useQuery<DownloadQueueItem[]>({
     queryKey: ['downloads-queue'],
     queryFn: async () => {
-      // First, trigger status sync if there are active downloads
+      // Always trigger sync first for real-time updates
+      let syncResult = null;
       try {
         const syncResponse = await fetch('/api/downloads/sync', {
           method: 'POST',
         });
         if (syncResponse.ok) {
-          // Invalidate downloads queries after sync
-          queryClient.invalidateQueries({ queryKey: ['downloads'] });
+          syncResult = await syncResponse.json();
+          // Wait a moment for sync to complete
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       } catch (error) {
         console.warn('Failed to sync download statuses:', error);
-        // Continue with fetching even if sync fails
       }
 
       const response = await fetch(`${API_BASE}?status=pending,processing`);
@@ -213,22 +215,60 @@ export function useDownloadsQueue() {
       }
       
       const result = await response.json();
-      // Transform downloads to queue items format
-      return result.data.map((download: MediaDownload) => ({
-        id: download.id,
-        url: download.originalUrl,
-        title: download.title || download.metadata?.title || 'Processing...',
-        platform: download.metadata?.platform,
-        status: download.downloadStatus,
-        progress: download.metadata?.progress,
-        error: download.metadata?.error,
-        createdAt: download.createdAt,
-      }));
+      
+      // Transform downloads to queue items format with persisted progress
+      return result.data.map((download: MediaDownload) => {
+        const serverProgress = download.metadata?.detailedProgress;
+        const storedProgress = progressStorageService.getProgress(download.id);
+        
+        // Use stored progress if it's more recent or if server doesn't have detailed progress
+        const detailedProgress = (storedProgress && (!serverProgress || storedProgress.percentage >= (serverProgress.percentage || 0)))
+          ? storedProgress
+          : serverProgress || progressStorageService.getProgressWithFallback(download.id, download.downloadStatus);
+
+        // Save the latest progress to storage
+        if (serverProgress && (!storedProgress || serverProgress.percentage > (storedProgress.percentage || 0))) {
+          progressStorageService.saveProgress(download.id, serverProgress);
+        }
+
+        // Clean up completed downloads from storage
+        if (download.downloadStatus === 'completed') {
+          progressStorageService.removeProgress(download.id);
+        }
+
+        return {
+          id: download.id,
+          url: download.originalUrl,
+          title: download.title || download.metadata?.title || 'Processing...',
+          platform: download.metadata?.platform,
+          status: download.downloadStatus,
+          progress: download.metadata?.progress || detailedProgress.percentage || 0,
+          detailedProgress,
+          error: download.metadata?.error,
+          createdAt: download.createdAt,
+        };
+      });
     },
     refetchInterval: (query) => {
-      // More aggressive polling when there are active downloads
+      // Production-scale polling - now with proper rate limits
       const data = query?.state?.data;
-      return data && data.length > 0 ? 500 : 2000; // 500ms when active, 2s when idle
+      const hasProcessingDownloads = data && data.some((item: any) => item.status === 'processing');
+      const hasPendingDownloads = data && data.some((item: any) => item.status === 'pending');
+      const activeCount = data?.length || 0;
+      
+      // If no active downloads, stop polling entirely
+      if (!hasProcessingDownloads && !hasPendingDownloads) {
+        return false;
+      }
+      
+      // Smart polling based on download activity
+      if (hasProcessingDownloads) {
+        return 2000; // 2s for active processing - responsive but not overwhelming
+      } else if (activeCount >= 3) {
+        return 3000; // 3s when multiple pending downloads
+      } else {
+        return 2500; // 2.5s for pending downloads
+      }
     },
     staleTime: 0, // Always consider stale to ensure fresh data
     refetchIntervalInBackground: true, // Continue polling when tab is not active

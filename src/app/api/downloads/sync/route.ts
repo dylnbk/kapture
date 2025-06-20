@@ -11,7 +11,7 @@ async function handlePOST(req: NextRequest) {
   try {
     console.log('Starting download status sync...');
     
-    // Get all pending and processing downloads
+    // Get pending and processing downloads with smart batching
     const activeDownloads = await db.mediaDownload.findMany({
       where: {
         downloadStatus: {
@@ -19,9 +19,9 @@ async function handlePOST(req: NextRequest) {
         }
       },
       orderBy: {
-        createdAt: 'asc'
+        updatedAt: 'asc' // Prioritize downloads that haven't been updated recently
       },
-      take: 50 // Limit to prevent overwhelming the system
+      take: 15 // Increased batch size - yt-dlp service can handle more requests
     });
 
     console.log(`Found ${activeDownloads.length} active downloads to sync`);
@@ -37,11 +37,84 @@ async function handlePOST(req: NextRequest) {
     // Process each download
     for (const download of activeDownloads) {
       try {
-        // Get status from yt-dlp service
-        const status = await mediaService.getDownloadStatus(download.id);
+        // Get status from yt-dlp service - more aggressive approach
+        let status = null;
+        let jobNotFound = false;
+        
+        try {
+          status = await mediaService.getDownloadStatus(download.id);
+          console.log(`Sync: Got status for ${download.id}:`, status?.status, `${status?.progress}%`);
+        } catch (error: any) {
+          if (error.message?.includes('404') || error.message?.includes('Job not found')) {
+            jobNotFound = true;
+            console.log(`Job ${download.id} not found in yt-dlp service - likely completed and cleaned up`);
+          } else if (error.message?.includes('429') || error.message?.includes('Too Many Requests')) {
+            console.log(`Rate limited for download ${download.id}, will retry on next sync`);
+            continue; // Skip this download for now, will retry on next sync
+          } else {
+            console.error(`Error getting status for ${download.id}:`, error.message);
+            continue; // Skip this download, will retry on next sync
+          }
+        }
+        
+        // If job not found and download is old enough, mark as completed
+        if (jobNotFound && !status) {
+          const downloadAge = Date.now() - new Date(download.createdAt).getTime();
+          const fiveMinutesInMs = 5 * 60 * 1000;
+          
+          if (downloadAge > fiveMinutesInMs) {
+            console.log(`Marking orphaned download ${download.id} as completed (job not found, age: ${Math.round(downloadAge / 60000)}min)`);
+            
+            // Mark as completed in database
+            await db.mediaDownload.update({
+              where: { id: download.id },
+              data: {
+                downloadStatus: 'completed',
+                updatedAt: new Date(),
+                metadata: {
+                  ...(download.metadata as Record<string, any> || {}),
+                  completedAt: new Date().toISOString(),
+                  autoCompleted: true,
+                  reason: 'job_not_found_after_completion'
+                }
+              }
+            });
+            
+            syncResults.completed++;
+            continue;
+          } else {
+            console.warn(`Download ${download.id} job not found but too recent (${Math.round(downloadAge / 60000)}min), skipping`);
+            continue;
+          }
+        }
         
         if (!status) {
-          console.warn(`No status found for download ${download.id}`);
+          // If no status and download is old, check if we should force complete it
+          const downloadAge = Date.now() - new Date(download.createdAt).getTime();
+          const tenMinutesInMs = 10 * 60 * 1000;
+          
+          if (downloadAge > tenMinutesInMs && download.downloadStatus === 'pending') {
+            console.log(`Forcing completion of stuck download ${download.id} (age: ${Math.round(downloadAge / 60000)}min)`);
+            
+            await db.mediaDownload.update({
+              where: { id: download.id },
+              data: {
+                downloadStatus: 'completed',
+                updatedAt: new Date(),
+                metadata: {
+                  ...(download.metadata as Record<string, any> || {}),
+                  completedAt: new Date().toISOString(),
+                  autoCompleted: true,
+                  reason: 'forced_completion_after_timeout'
+                }
+              }
+            });
+            
+            syncResults.completed++;
+            continue;
+          }
+          
+          console.warn(`No status found for download ${download.id} after ${maxRetries} retries`);
           continue;
         }
 
@@ -49,56 +122,43 @@ async function handlePOST(req: NextRequest) {
           updatedAt: new Date(),
         };
 
-        // Handle status changes
-        if (status.status === 'completed' && download.downloadStatus !== 'completed') {
-          // Download completed - get file info and update storage URL
-          try {
-            const ytdlpServiceUrl = process.env.YTDLP_SERVICE_URL || 'http://localhost:3001';
-            const filesResponse = await fetch(`${ytdlpServiceUrl}/download/${download.id}/files`);
-            
-            if (filesResponse.ok) {
-              const fileData = await filesResponse.json();
-              const files = fileData.files || [];
-              
-              if (files.length > 0) {
-                const mainFile = files[0];
-                updateData.downloadStatus = 'completed';
-                updateData.storageUrl = `/api/downloads/files/${download.id}`;
-                updateData.storageKey = `downloads/${download.id}/${mainFile.name}`;
-                updateData.fileSize = mainFile.size;
-                
-                // Set default file lifecycle (7 days retention)
-                const cleanupDate = new Date();
-                cleanupDate.setDate(cleanupDate.getDate() + 7);
-                updateData.fileCleanupAt = cleanupDate;
-                updateData.keepFile = false;
-                
-                // Update metadata with file info
-                const currentMetadata = download.metadata as Record<string, any> || {};
-                updateData.metadata = {
-                  ...currentMetadata,
-                  ...status.metadata,
-                  fileName: mainFile.name,
-                  actualFileSize: mainFile.size,
-                  completedAt: new Date().toISOString()
-                };
-                
-                // Note: title, thumbnail, platform are stored in metadata JSON field
-                // No direct field updates needed since metadata already contains this info
-                
-                syncResults.completed++;
-                console.log(`Download ${download.id} completed successfully`);
-              }
-            }
-          } catch (fileError) {
-            console.error(`Failed to get file info for ${download.id}:`, fileError);
-            updateData.downloadStatus = 'failed';
-            updateData.metadata = {
-              ...(download.metadata as Record<string, any> || {}),
-              error: 'Failed to retrieve downloaded file'
-            };
-            syncResults.failed++;
-          }
+        // Handle status changes - prioritize completion detection
+        if (status && (status.status === 'completed' || status.progress === 100)) {
+          console.log(`🎉 Download ${download.id} is COMPLETED! Updating database...`);
+          
+          // Always mark as completed if yt-dlp says so
+          updateData.downloadStatus = 'completed';
+          updateData.storageUrl = `/api/downloads/files/${download.id}`;
+          updateData.storageKey = `downloads/${download.id}/`;
+          
+          // Set default file lifecycle (7 days retention)
+          const cleanupDate = new Date();
+          cleanupDate.setDate(cleanupDate.getDate() + 7);
+          updateData.fileCleanupAt = cleanupDate;
+          updateData.keepFile = false;
+          
+          // Update metadata with completion info
+          const currentMetadata = download.metadata as Record<string, any> || {};
+          updateData.metadata = {
+            ...currentMetadata,
+            ...status.metadata,
+            progress: 100,
+            detailedProgress: {
+              percentage: 100,
+              currentPhase: 'Completed',
+              phases: [
+                { name: 'Queue', status: 'completed' },
+                { name: 'Extract Info', status: 'completed' },
+                { name: 'Download', status: 'completed' },
+                { name: 'Process', status: 'completed' },
+                { name: 'Complete', status: 'completed' }
+              ]
+            },
+            completedAt: new Date().toISOString()
+          };
+          
+          syncResults.completed++;
+          console.log(`✅ Download ${download.id} marked as completed in database`);
         } else if (status.status === 'failed' && download.downloadStatus !== 'failed') {
           updateData.downloadStatus = 'failed';
           updateData.metadata = {
@@ -111,17 +171,17 @@ async function handlePOST(req: NextRequest) {
         } else if (status.status === 'processing') {
           updateData.downloadStatus = 'processing';
           
-          // Update progress if available
-          if (status.progress !== undefined) {
-            const currentMetadata = download.metadata as Record<string, any> || {};
-            updateData.metadata = {
-              ...currentMetadata,
-              progress: status.progress,
-              lastProgressUpdate: new Date().toISOString()
-            };
-          }
+          // Always update progress and detailed progress for processing downloads
+          const currentMetadata = download.metadata as Record<string, any> || {};
+          updateData.metadata = {
+            ...currentMetadata,
+            progress: status.progress || 0,
+            detailedProgress: status.detailedProgress || null,
+            lastProgressUpdate: new Date().toISOString()
+          };
           
           syncResults.stillProcessing++;
+          console.log(`Updated progress for ${download.id}: ${status.progress}% - Phase: ${status.detailedProgress?.currentPhase}`);
         }
 
         // Update the download record

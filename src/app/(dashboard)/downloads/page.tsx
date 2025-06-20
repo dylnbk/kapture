@@ -8,12 +8,14 @@ import { Download, Loader2 } from "lucide-react";
 import { useDownloads, useDownloadsQueue } from "@/hooks/use-downloads";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function DownloadsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [previousQueueCount, setPreviousQueueCount] = useState(0);
   const downloadsPerPage = 10;
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   const {
     data: downloadsResponse,
@@ -25,6 +27,29 @@ export default function DownloadsPage() {
     data: queueItems = [],
     isLoading: isQueueLoading
   } = useDownloadsQueue();
+
+  // Cleanup orphaned downloads on page load
+  useEffect(() => {
+    const cleanupOrphanedDownloads = async () => {
+      try {
+        console.log('Triggering cleanup sync for orphaned downloads...');
+        const response = await fetch('/api/downloads/sync', {
+          method: 'POST',
+        });
+        if (response.ok) {
+          // Refresh the downloads data after cleanup
+          queryClient.invalidateQueries({ queryKey: ['downloads-queue'] });
+          queryClient.invalidateQueries({ queryKey: ['downloads'] });
+        }
+      } catch (error) {
+        console.warn('Failed to cleanup orphaned downloads:', error);
+      }
+    };
+
+    // Run cleanup after a short delay to let the page load
+    const timer = setTimeout(cleanupOrphanedDownloads, 1000);
+    return () => clearTimeout(timer);
+  }, []); // Run only once on mount
 
   const downloads = downloadsResponse?.data || [];
   const meta = downloadsResponse?.meta;
@@ -63,19 +88,29 @@ export default function DownloadsPage() {
     }
   }, [downloads, toast]); // Removed previousDownloadIds from dependency array to prevent infinite loop
 
-  // Also track queue changes for real-time status
+  // Also track queue changes for real-time status and detect completions
   useEffect(() => {
     const activeCount = queueItems.filter(item =>
       item.status === 'pending' || item.status === 'processing'
     ).length;
+    
+    // If we had downloads before but now have fewer, some likely completed
+    if (previousQueueCount > 0 && activeCount < previousQueueCount) {
+      console.log(`🔄 Queue count decreased from ${previousQueueCount} to ${activeCount} - refreshing download history`);
+      // Refresh the download history to show newly completed downloads
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['downloads'] });
+      }, 1000); // Give sync time to complete
+    }
+    
     setPreviousQueueCount(activeCount);
-  }, [queueItems]);
+  }, [queueItems, previousQueueCount, queryClient]);
 
   // Handle error states
   if (downloadsError) {
     return (
       <div className="p-6 space-y-6 animate-fade-in">
-        <DownloadsHeader />
+        <DownloadsHeader queueItems={queueItems} />
         <div className="text-center py-12">
           <p className="text-light-error dark:text-dark-error">
             Failed to load downloads. Please try again.

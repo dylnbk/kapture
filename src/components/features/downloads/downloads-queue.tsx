@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { EnhancedProgress } from "@/components/ui/enhanced-progress";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { X, Pause, Play, RotateCcw, Loader2 } from "lucide-react";
 import { DownloadQueueItem } from "@/types/downloads";
@@ -96,14 +97,17 @@ function QueueItemCard({ item }: { item: DownloadQueueItem }) {
             </p>
           )}
           
-          {item.status === "processing" && item.progress !== undefined && (
-            <div className="space-y-1">
-              <Progress value={item.progress} className="h-2" />
-              <p className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
-                {item.progress}% complete
-              </p>
-            </div>
-          )}
+          <EnhancedProgress
+            value={item.progress || item.detailedProgress?.percentage || 0}
+            status={item.status}
+            phases={item.detailedProgress?.phases}
+            currentPhase={item.detailedProgress?.currentPhase}
+            speed={item.detailedProgress?.speed}
+            eta={item.detailedProgress?.eta}
+            size={item.detailedProgress?.totalSize}
+            error={item.error}
+            className="mt-2"
+          />
           
           {item.error && (
             <p className="text-sm text-light-error dark:text-dark-error mt-2">
@@ -159,7 +163,8 @@ function QueueItemCard({ item }: { item: DownloadQueueItem }) {
         title="Cancel Download"
         description={`Are you sure you want to ${canCancel ? 'cancel' : 'remove'} "${item.title || item.url}"?`}
         onConfirm={handleDeleteConfirm}
-        confirmText={canCancel ? "Cancel" : "Remove"}
+        confirmText={canCancel ? "Yes, Cancel" : "Remove"}
+        cancelText="Keep Download"
         variant="destructive"
         isLoading={isActioning || deleteMutation.isPending}
       />

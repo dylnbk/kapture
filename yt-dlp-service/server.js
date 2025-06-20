@@ -59,13 +59,20 @@ app.use(cors());
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 
-// Rate limiting
+// Rate limiting - production scale
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 1000, // limit each IP to 1000 requests per minute (production scale)
   message: 'Too many requests from this IP, please try again later.'
 });
 app.use(limiter);
+
+// Specific rate limiting for status endpoint - production ready limits
+const statusLimiter = rateLimit({
+  windowMs: 1000, // 1 second
+  max: 100, // limit each IP to 100 status requests per second (production scale)
+  message: 'Too many status requests, please slow down.'
+});
 
 // Ensure download directory exists
 async function ensureDownloadDir() {
@@ -89,16 +96,26 @@ function executeYtDlp(args, onProgress, onComplete, onError) {
     const text = data.toString();
     output += text;
     
-    // Parse progress from yt-dlp output
-    const progressMatch = text.match(/(\d+\.?\d*)%/);
-    if (progressMatch && onProgress) {
-      const progress = parseFloat(progressMatch[1]);
-      onProgress(progress);
+    // Parse detailed progress from yt-dlp output
+    if (onProgress) {
+      const progressInfo = parseProgressInfo(text);
+      if (progressInfo) {
+        onProgress(progressInfo);
+      }
     }
   });
 
   process.stderr.on('data', (data) => {
-    errorOutput += data.toString();
+    const errorText = data.toString();
+    errorOutput += errorText;
+    
+    // Sometimes yt-dlp outputs progress info to stderr
+    if (onProgress) {
+      const progressInfo = parseProgressInfo(errorText);
+      if (progressInfo) {
+        onProgress(progressInfo);
+      }
+    }
   });
 
   process.on('close', (code) => {
@@ -114,6 +131,60 @@ function executeYtDlp(args, onProgress, onComplete, onError) {
   });
 
   return process;
+}
+
+// Enhanced progress parsing function
+function parseProgressInfo(text) {
+  const lines = text.split('\n');
+  let progressInfo = null;
+  
+  for (const line of lines) {
+    // Parse download progress: [download]  45.2% of 123.45MiB at 1.23MiB/s ETA 00:42
+    const downloadMatch = line.match(/\[download\]\s+(\d+\.?\d*)%\s+of\s+([\d.]+\w+)\s+at\s+([\d.]+\w+\/s)(?:\s+ETA\s+(\d+:\d+))?/);
+    if (downloadMatch) {
+      const [, percentage, totalSize, speed, eta] = downloadMatch;
+      progressInfo = {
+        percentage: parseFloat(percentage),
+        speed: speed,
+        eta: eta,
+        totalSize: totalSize,
+        phase: 'Downloading'
+      };
+    }
+    
+    // Parse simple percentage: 45.2%
+    const simpleMatch = line.match(/(\d+\.?\d*)%/);
+    if (simpleMatch && !progressInfo) {
+      progressInfo = {
+        percentage: parseFloat(simpleMatch[1]),
+        phase: 'Processing'
+      };
+    }
+    
+    // Detect different phases
+    if (line.includes('[info]') && line.includes('Extracting URL')) {
+      progressInfo = {
+        percentage: 0,
+        phase: 'Extracting Info'
+      };
+    }
+    
+    if (line.includes('[download]') && line.includes('Destination:')) {
+      progressInfo = {
+        percentage: 0,
+        phase: 'Starting Download'
+      };
+    }
+    
+    if (line.includes('[ffmpeg]') || line.includes('Merging formats')) {
+      progressInfo = {
+        percentage: 95,
+        phase: 'Processing Video'
+      };
+    }
+  }
+  
+  return progressInfo;
 }
 
 // Helper function to parse yt-dlp JSON output
@@ -156,7 +227,18 @@ app.post('/download', async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date(),
       metadata: null,
-      error: null
+      error: null,
+      detailedProgress: {
+        percentage: 0,
+        currentPhase: 'Initializing',
+        phases: [
+          { name: 'Queue', status: 'completed' },
+          { name: 'Extract Info', status: 'pending' },
+          { name: 'Download', status: 'pending' },
+          { name: 'Process', status: 'pending' },
+          { name: 'Complete', status: 'pending' }
+        ]
+      }
     };
 
     jobs.set(jobId, job);
@@ -227,13 +309,43 @@ app.post('/download', async (req, res) => {
 
     const process = executeYtDlp(
       args,
-      (progress) => {
+      (progressInfo) => {
         const currentJob = jobs.get(jobId);
         if (currentJob) {
-          currentJob.progress = Math.min(progress, 100);
+          currentJob.progress = Math.min(progressInfo.percentage || 0, 100);
           currentJob.status = 'processing';
           currentJob.updatedAt = new Date();
+          
+          // Update detailed progress
+          const phases = [...currentJob.detailedProgress.phases];
+          
+          // Update phases based on current progress
+          if (progressInfo.phase === 'Extracting Info') {
+            phases[1].status = 'active';
+            phases[1].startTime = phases[1].startTime || new Date().toISOString();
+          } else if (progressInfo.phase === 'Downloading' || progressInfo.phase === 'Starting Download') {
+            phases[1].status = 'completed';
+            phases[1].endTime = phases[1].endTime || new Date().toISOString();
+            phases[2].status = 'active';
+            phases[2].startTime = phases[2].startTime || new Date().toISOString();
+          } else if (progressInfo.phase === 'Processing Video') {
+            phases[2].status = 'completed';
+            phases[2].endTime = phases[2].endTime || new Date().toISOString();
+            phases[3].status = 'active';
+            phases[3].startTime = phases[3].startTime || new Date().toISOString();
+          }
+          
+          currentJob.detailedProgress = {
+            percentage: progressInfo.percentage || 0,
+            speed: progressInfo.speed,
+            eta: progressInfo.eta,
+            totalSize: progressInfo.totalSize,
+            currentPhase: progressInfo.phase || 'Processing',
+            phases: phases
+          };
+          
           jobs.set(jobId, currentJob);
+          console.log(`Job ${jobId} progress: ${progressInfo.percentage}% - ${progressInfo.phase}`);
         }
       },
       async (output) => {
@@ -300,6 +412,20 @@ app.post('/download', async (req, res) => {
             currentJob.status = 'completed';
             currentJob.progress = 100;
             currentJob.updatedAt = new Date();
+            
+            // Complete all phases
+            const completedPhases = currentJob.detailedProgress.phases.map(phase => ({
+              ...phase,
+              status: 'completed',
+              endTime: phase.endTime || new Date().toISOString()
+            }));
+            
+            currentJob.detailedProgress = {
+              ...currentJob.detailedProgress,
+              percentage: 100,
+              currentPhase: 'Completed',
+              phases: completedPhases
+            };
 
             // Try to read metadata from info.json if it exists
             const infoFile = files.find(f => f.endsWith('.info.json'));
@@ -370,7 +496,7 @@ app.post('/download', async (req, res) => {
 });
 
 // GET /download/:id/status - Check download status
-app.get('/download/:id/status', (req, res) => {
+app.get('/download/:id/status', statusLimiter, (req, res) => {
   const { id } = req.params;
   const job = jobs.get(id);
 
@@ -389,6 +515,7 @@ app.get('/download/:id/status', (req, res) => {
     fileType: job.format.includes('audio') ? 'audio' : 'video',
     quality: 'high', // Simplified for now
     metadata: job.metadata,
+    detailedProgress: job.detailedProgress,
     error: job.error,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt

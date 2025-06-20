@@ -28,8 +28,16 @@ async function handleGET(req: NextRequest, user: any) {
     const total = await db.mediaDownload.count({
       where: {
         userId: user.id,
-        keepFile: false, // Exclude archived files from count
-        ...(status && { downloadStatus: status }),
+        // Only filter by keepFile for non-active downloads
+        ...(status && (status.includes('pending') || status.includes('processing'))
+          ? {} // Don't filter by keepFile for active downloads
+          : { keepFile: false } // Exclude archived files from count for completed downloads
+        ),
+        ...(status && {
+          downloadStatus: {
+            in: status.split(',').map(s => s.trim())
+          }
+        }),
       },
     });
 

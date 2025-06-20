@@ -19,6 +19,23 @@ export interface DownloadJob {
   fileType: string;
   quality: string;
   metadata?: DownloadMetadata;
+  detailedProgress?: {
+    percentage: number;
+    speed?: string;
+    eta?: string;
+    downloadedBytes?: number;
+    totalBytes?: number;
+    totalSize?: string;
+    currentPhase?: string;
+    phases?: Array<{
+      name: string;
+      status: 'pending' | 'active' | 'completed' | 'failed';
+      progress?: number;
+      message?: string;
+      startTime?: string;
+      endTime?: string;
+    }>;
+  };
   error?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -116,7 +133,8 @@ class MediaService {
       let cached = null;
       try {
         cached = await cache.get<DownloadJob>(CACHE_KEYS.DOWNLOAD_STATUS(jobId));
-        if (cached && cached.status !== 'processing') {
+        if (cached && (cached.status === 'completed' || cached.status === 'failed')) {
+          // Don't make new requests for completed/failed downloads
           return cached;
         }
       } catch (cacheError) {
@@ -129,7 +147,17 @@ class MediaService {
 
       if (!response.ok) {
         if (response.status === 404) {
+          // Job not found - could be completed and cleaned up
+          console.log(`Job ${jobId} not found (404) - may have been completed and cleaned up`);
           return null;
+        }
+        if (response.status === 429) {
+          // Rate limited - return cached data if available, otherwise throw
+          if (cached) {
+            console.warn(`Rate limited for job ${jobId}, returning cached data`);
+            return cached;
+          }
+          throw new Error(`Status check failed: Too Many Requests`);
         }
         throw new Error(`Status check failed: ${response.statusText}`);
       }
@@ -150,6 +178,12 @@ class MediaService {
       return job;
     } catch (error) {
       console.error('Get download status error:', error);
+      
+      // If it's a rate limiting error, don't spam logs
+      if (error instanceof Error && error.message.includes('Too Many Requests')) {
+        throw error; // Re-throw to be handled by sync with backoff
+      }
+      
       return null;
     }
   }

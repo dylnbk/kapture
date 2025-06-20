@@ -137,8 +137,16 @@ export async function getUserDownloads(
   return await db.mediaDownload.findMany({
     where: {
       userId,
-      keepFile: false, // Exclude archived files from download history
-      ...(options?.status && { downloadStatus: options.status }),
+      // Only filter by keepFile for non-active downloads
+      ...(options?.status && options.status.includes('pending') || options?.status && options.status.includes('processing')
+        ? {} // Don't filter by keepFile for active downloads
+        : { keepFile: false } // Exclude archived files from download history for completed downloads
+      ),
+      ...(options?.status && {
+        downloadStatus: {
+          in: options.status.split(',').map(s => s.trim())
+        }
+      }),
     },
     orderBy: {
       createdAt: 'desc',

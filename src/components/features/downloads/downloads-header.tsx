@@ -8,12 +8,18 @@ import { useState } from "react";
 import React from "react";
 import { useDownloadRequest, useDownloadsQueue } from "@/hooks/use-downloads";
 
-export function DownloadsHeader() {
+interface DownloadsHeaderProps {
+  queueItems?: any[];
+}
+
+export function DownloadsHeader({ queueItems: externalQueueItems = [] }: DownloadsHeaderProps = {}) {
   const [url, setUrl] = useState("");
   const [fileType, setFileType] = useState<'video' | 'audio' | 'image' | undefined>(undefined);
   const [activeDownloads, setActiveDownloads] = useState<{url: string, id?: string}[]>([]);
   const downloadMutation = useDownloadRequest();
-  const { data: queueItems = [] } = useDownloadsQueue();
+  
+  // Use external queue items if provided, otherwise use hook
+  const queueItems = externalQueueItems.length > 0 ? externalQueueItems : [];
 
   const handleDownload = async () => {
     if (!url.trim()) return;
@@ -128,8 +134,8 @@ export function DownloadsHeader() {
         </div>
       </Card>
 
-      {/* Simple Download Status */}
-      {activeDownloads.length > 0 && (
+      {/* Simple Download Status - Only show if no queue items */}
+      {activeDownloads.length > 0 && queueItems.length === 0 && (
         <Card variant="glass" className="p-3">
           <div className="flex items-center space-x-3">
             <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
