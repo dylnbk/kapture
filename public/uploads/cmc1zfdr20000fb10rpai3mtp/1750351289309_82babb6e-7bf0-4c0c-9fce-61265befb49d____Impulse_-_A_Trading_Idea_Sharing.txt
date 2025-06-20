@@ -1,0 +1,155 @@
+## Impulse - A Trading Idea Sharing Platform ##
+
+Project Brief
+This platform is a fast, minimalist web application built for traders to share trading ideas, strategies, indicators, and market signals. It combines a social feed, real-time trend scanning, and alerting into one modular, extensible system—entirely self-hosted on Render.
+
+🔍 Core Features
+🧠 Idea Feed
+A scrollable feed of trading insights, strategies, and analysis. Posts support markdown, embedded charts (via TradingView), and technical indicator code (e.g., Pine Script or common code language snippets).
+Users page shows all their posted content, users can pin content to the top of their profile. Users can follow each other.
+
+🛠 Post Creation Tools
+Users can create and share formatted strategies with rich media and charts. Markdown support allows code, visuals, and documentation to be included seamlessly.
+
+📊 Trend Scanner
+Background worker monitors coin price movements for patterns (e.g., breakouts, MA crossovers), surfacing assets that may be about to move.
+
+🔔 Real-Time Notifications
+Users can receive alerts (via WebSocket and push/email) when scan conditions are met or followed traders post new signals.
+
+📥 Social Login
+Simple and secure sign-in via Google (expandable to GitHub, Discord, etc.) using Passport.js and self-hosted JWT or cookie sessions.
+
+🧬 Modular, Scalable Architecture
+Built as a pnpm monorepo with Fastify (backend), Vite + React (frontend), tRPC (API), Prisma (DB), and Redis (jobs/cache)—all deployable on Render with minimal ops.
+
+📈 Additional Enhancements
+Copy trading, gamification (badges, rep, leaderboards), features, and a paid strategy marketplace are planned as the platform matures.
+
+🛠 Implementation Stack
+Frontend: React (Vite), TailwindCSS, tRPC client
+
+Backend: Fastify, Passport.js, tRPC, JWT, BullMQ
+
+Database: PostgreSQL (via Prisma ORM)
+
+Jobs & Realtime: Redis + BullMQ, socket.io
+
+Deployment: Fully hosted on Render (Frontend, Backend, DB, Redis)
+
+
+
+
+# Impulse - A Trading Idea Sharing Platform
+
+## Project Brief
+This platform is a fast, minimalist web application built for traders to share trading ideas, strategies, indicators, and market signals. It combines a social feed, real-time chat rooms, trend scanning, and alerting into one modular, extensible system—entirely self-hosted on Render.
+
+## 🔍 Core Features
+
+### 🧠 Idea Feed
+A scrollable feed of trading insights, strategies, and analysis. Posts support markdown, embedded charts (via TradingView), and technical indicator code (e.g., Pine Script or common code language snippets).
+Users page shows all their posted content, users can pin content to the top of their profile. Users can follow each other.
+
+### 💬 Real-Time Chat Rooms
+Multi-channel chat system with topic-based rooms (e.g., #crypto-signals, #forex-analysis, #day-trading). Features include:
+- **Channel Management**: Admins can create, configure, and archive channels
+- **Access Control**: Channels can be public, or premium subscriber exclusive
+- **Rich Messaging**: Support for text, images, trading charts, and @mentions
+- **Message Threading**: Reply to specific messages for organized discussions
+- **Chat Moderation**: Moderators can delete messages, timeout users, and manage channel behavior
+- **Persistent History**: Searchable message history with pagination
+
+### 🛠 Post Creation Tools
+Users can create and share formatted strategies with rich media and charts. Markdown support allows code, visuals, embeds and documentation to be included seamlessly.
+
+### 📊 Trend Scanner
+Background worker monitors coin price movements for patterns (e.g., breakouts, MA crossovers), surfacing assets that may be about to move.
+
+### 🔔 Real-Time Notifications
+Users can receive alerts (via WebSocket and push/email) when scan conditions are met, followed traders post new signals, or they're mentioned in chat.
+
+### 👑 Admin Dashboard
+Comprehensive admin panel for platform management:
+- **User Management**: View, edit, suspend, or ban user accounts
+- **Content Moderation**: Review flagged posts, manage reported content
+- **Channel Administration**: Create/delete chat channels, set access permissions
+- **Analytics**: User engagement metrics, popular content, chat activity
+- **Role Management**: Assign moderator privileges to trusted users
+- **Subscription Management**: Handle premium memberships and billing
+- **System Monitoring**: Platform health, performance metrics, error logs
+
+### 🔐 User Roles & Permissions
+Hierarchical permission system:
+- **Admin**: Full platform control, user management, system configuration
+- **Moderator**: Content moderation, chat management, user warnings
+- **Premium Member**: Access to exclusive channels and advanced features (strategy marketplace)
+- **Member**: When registered they have platform access, public channels, standard features 
+
+### 📥 Social Login
+Simple and secure sign-in via Google (expandable to GitHub, Discord, etc.) using Passport.js and self-hosted JWT or cookie sessions.
+
+### 🧬 Modular, Scalable Architecture
+Built as a pnpm monorepo with Fastify (backend), Vite + React (frontend), tRPC (API), Prisma (DB), and Redis (jobs/cache)—all deployable on Render with minimal ops.
+
+### 🎨 Aesthetic
+Minimalist, modern & clean design using monochrome dark/lightmode and Glassmorphism cards
+- **Minimalist**: Minimalist first principles, no clutter, simple cards
+- **Unified icons**: Lucide dev icons
+- **Dark/Lightmode**: Monochromatic, but offering dark/lightmode toggle
+- **Glassmorphism**: All cards and elements are glass design, blur & transparent, modern
+- **Darkmode**: 
+[
+  { "color": "#121212", "purpose": "Base Background" },
+  { "color": "#E0E0E0", "purpose": "Primary Text" },
+  { "color": "#B0B0B0", "purpose": "Secondary Text/Subtle Elements" },
+  { "color": "#FFFFFF", "purpose": "Accent/Interactive Elements" },
+  { "color": "#00EB9B", "purpose": "Success/Positive" },
+  { "color": "#E70063", "purpose": "Error/Negative" },
+  { "color": "#878787", "purpose": "Borders/Dividers" }
+]
+- **Lightmode**: 
+[
+  { "color": "#F2F0EF", "purpose": "Base Background" },
+  { "color": "#2C2C2C", "purpose": "Primary Text" },
+  { "color": "#5F5F5F", "purpose": "Secondary Text/Subtle Elements" },
+  { "color": "#000000", "purpose": "Accent/Interactive Elements" },
+  { "color": "#00EB9B", "purpose": "Success/Positive" },
+  { "color": "#E70063", "purpose": "Error/Negative" },
+  { "color": "#878787", "purpose": "Borders/Dividers" }
+]
+
+## 📈 Additional Enhancements
+Copy trading, gamification (badges, rep, leaderboards), features, and a paid strategy marketplace are planned as the platform matures.
+
+## 🛠 Implementation Stack
+
+### Frontend
+- **React (Vite)**: Main UI framework
+- **TailwindCSS**: Styling and responsive design
+- **tRPC client**: Type-safe API communication
+- **Socket.io client**: Real-time chat and notifications
+
+### Backend
+- **Fastify**: High-performance web framework
+- **Passport.js**: Authentication middleware
+- **tRPC**: End-to-end type safety
+- **JWT**: Session management
+- **BullMQ**: Job queue system
+- **Socket.io**: WebSocket management for real-time features
+
+### Database & Storage
+- **PostgreSQL**: Primary database (via Prisma ORM)
+- **Redis**: Caching, session storage, and real-time data
+- **Prisma**: Database ORM with migrations
+
+### Real-time & Jobs
+- **Redis + BullMQ**: Background job processing
+- **Socket.io**: Chat rooms, live notifications, real-time updates
+
+### Deployment
+- **Render**: Fully hosted infrastructure
+  - Frontend: Static site deployment
+  - Backend: Node.js service
+  - Database: Managed PostgreSQL
+  - Redis: Managed Redis instance

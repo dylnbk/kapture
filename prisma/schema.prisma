@@ -1,0 +1,216 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Users table (synced with Clerk)
+model User {
+  id            String   @id @default(cuid())
+  clerkUserId   String   @unique @map("clerk_user_id")
+  email         String
+  name          String?
+  avatarUrl     String?  @map("avatar_url")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  subscription  UserSubscription?
+  usage         UserUsage[]
+  trends        Trend[]
+  downloads     MediaDownload[]
+  ideaboards    Ideaboard[]
+  aiGenerations AiGeneration[]
+  backgroundJobs BackgroundJob[]
+
+  @@map("users")
+}
+
+// Subscription management
+model UserSubscription {
+  id                    String    @id @default(cuid())
+  userId                String    @unique @map("user_id")
+  clerkUserId           String    @unique @map("clerk_user_id")
+  stripeCustomerId      String?   @unique @map("stripe_customer_id")
+  stripeSubscriptionId  String?   @unique @map("stripe_subscription_id")
+  status                String    @default("inactive")
+  priceId               String?   @map("price_id")
+  currentPeriodStart    DateTime? @map("current_period_start")
+  currentPeriodEnd      DateTime? @map("current_period_end")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_subscriptions")
+}
+
+// Usage tracking
+model UserUsage {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  usageType   String   @map("usage_type") // 'scrape', 'download', 'ai_generation'
+  count       Int      @default(0)
+  periodStart DateTime @map("period_start")
+  periodEnd   DateTime @map("period_end")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, usageType, periodStart])
+  @@map("user_usage")
+}
+
+// Trend data
+model Trend {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  platform     String   // 'youtube', 'tiktok', 'reddit', 'twitter'
+  contentType  String   @map("content_type") // 'video', 'post', 'comment'
+  title        String?
+  description  String?
+  url          String
+  thumbnailUrl String?  @map("thumbnail_url")
+  author       String?
+  likes        Int      @default(0)
+  views        Int      @default(0)
+  shares       Int      @default(0)
+  comments     Int      @default(0)
+  hashtags     String[]
+  metadata     Json?
+  scrapedAt    DateTime @map("scraped_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  downloads MediaDownload[]
+
+  @@index([userId, platform])
+  @@index([scrapedAt(sort: Desc)])
+  @@map("trends")
+}
+
+// Downloaded media
+model MediaDownload {
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
+  trendId           String?   @map("trend_id")
+  originalUrl       String    @map("original_url")
+  storageUrl        String    @map("storage_url")
+  storageKey        String    @map("storage_key")
+  fileType          String    @map("file_type") // 'video', 'audio', 'image'
+  fileSize          Int?      @map("file_size")
+  originalFileSize  Int?      @map("original_file_size") // Track original size for cleanup logic
+  duration          Int?      // in seconds for video/audio
+  metadata          Json?
+  downloadStatus    String    @default("pending") @map("download_status") // 'pending', 'processing', 'completed', 'failed'
+  keepFile          Boolean   @default(true) @map("keep_file") // Whether to retain actual file
+  fileCleanupAt     DateTime? @map("file_cleanup_at") // When file should be cleaned up
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trend Trend? @relation(fields: [trendId], references: [id], onDelete: SetNull)
+
+  @@index([userId, downloadStatus])
+  @@index([userId, keepFile, downloadStatus])
+  @@index([fileCleanupAt])
+  @@map("media_downloads")
+}
+
+// Ideaboards
+model Ideaboard {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  name        String   // Changed from title to match component
+  description String?
+  keywords    String[] // Changed from tags to keywords
+  creativity  Int      @default(7) // AI creativity level 1-10
+  status      String   @default("active") // 'active', 'archived'
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contentIdeas  ContentIdea[]
+  aiGenerations AiGeneration[]
+
+  @@index([userId, status])
+  @@map("ideaboards")
+}
+
+// Content ideas within ideaboards
+model ContentIdea {
+  id                String   @id @default(cuid())
+  ideaboardId       String   @map("ideaboard_id")
+  title             String
+  description       String?
+  content           String?  // The actual written content
+  contentType       String   @map("content_type") // 'blog_post', 'social_media_post', etc.
+  toneStyle         String   @default("professional") @map("tone_style")
+  targetAudience    String?  @map("target_audience")
+  referencedContent String[] @default([]) @map("referenced_content") // IDs of scraped content used
+  status            String   @default("draft") // 'draft', 'ai_suggested', 'ai_generated', 'completed'
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  ideaboard Ideaboard @relation(fields: [ideaboardId], references: [id], onDelete: Cascade)
+
+  @@index([ideaboardId, status])
+  @@map("content_ideas")
+}
+
+// AI generations
+model AiGeneration {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  ideaboardId    String   @map("ideaboard_id")
+  prompt         String
+  response       String
+  model          String
+  tokensUsed     Int?     @map("tokens_used")
+  generationType String   @map("generation_type") // 'title', 'hook', 'script', 'description', 'hashtags'
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ideaboard Ideaboard @relation(fields: [ideaboardId], references: [id], onDelete: Cascade)
+
+  @@index([userId, generationType])
+  @@map("ai_generations")
+}
+
+// Background jobs
+model BackgroundJob {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id")
+  jobType      String    @map("job_type")
+  jobData      Json      @map("job_data")
+  status       String    @default("pending") // 'pending', 'processing', 'completed', 'failed'
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(3) @map("max_attempts")
+  errorMessage String?   @map("error_message")
+  scheduledAt  DateTime? @map("scheduled_at")
+  startedAt    DateTime? @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledAt])
+  @@map("background_jobs")
+}

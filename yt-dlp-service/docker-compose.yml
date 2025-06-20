@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  yt-dlp-service:
+    build: .
+    container_name: yt-dlp-service
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - DOWNLOAD_DIR=/app/downloads
+      - YTDLP_BINARY=yt-dlp
+      - NODE_ENV=production
+    volumes:
+      # Mount downloads directory to persist files
+      - ./downloads:/app/downloads
+      # Optional: Mount logs directory
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - yt-dlp-network
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
+networks:
+  yt-dlp-network:
+    driver: bridge
+
+volumes:
+  downloads:
+  logs:

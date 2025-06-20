@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 70%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 0 0% 7%;         /* #121212 */
+    --foreground: 0 0% 88%;        /* #E0E0E0 */
+    --card: 0 0% 10%;              /* Slightly lighter than background for cards */
+    --card-foreground: 0 0% 88%;   /* #E0E0E0 */
+    --popover: 0 0% 10%;           /* Same as card */
+    --popover-foreground: 0 0% 88%; /* #E0E0E0 */
+    --primary: 0 0% 100%;          /* #FFFFFF */
+    --primary-foreground: 0 0% 7%; /* #121212 */
+    --secondary: 0 0% 15%;         /* Slightly lighter gray for secondary elements */
+    --secondary-foreground: 0 0% 69%; /* #B0B0B0 */
+    --muted: 0 0% 15%;             /* Muted background */
+    --muted-foreground: 0 0% 69%;  /* #B0B0B0 */
+    --accent: 0 0% 15%;            /* Accent background */
+    --accent-foreground: 0 0% 100%; /* #FFFFFF */
+    --destructive: 334 100% 45%;   /* #E70063 */
+    --destructive-foreground: 0 0% 100%; /* #FFFFFF */
+    --border: 0 0% 53%;            /* #878787 */
+    --input: 0 0% 15%;             /* Input background */
+    --ring: 0 0% 100%;             /* Focus ring white */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Kapture specific styles */
+@layer base {
+  .kapture-glass {
+    @apply backdrop-blur-md bg-white/10 border border-white/20;
+  }
+  
+  .kapture-glass-dark {
+    @apply backdrop-blur-md bg-black/10 border border-white/10;
+  }
+  
+  .kapture-gradient {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+  }
+  
+  .kapture-gradient-dark {
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.05));
+  }
+}
+
+/* Custom scrollbar */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(155, 155, 155, 0.5) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(155, 155, 155, 0.5);
+    border-radius: 20px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(155, 155, 155, 0.7);
+  }
+}
+
+/* Animation utilities */
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+  
+  .animate-slide-down {
+    animation: slideDown 0.3s ease-out;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Custom editor container to avoid Tailwind spacing variables */
+.editor-container {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  --tw-space-y-reverse: unset !important;
+  --tw-space-x-reverse: unset !important;
+}
+
+.editor-container * {
+  --tw-space-y-reverse: unset !important;
+  --tw-space-x-reverse: unset !important;
+}

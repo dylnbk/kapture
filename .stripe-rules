@@ -1,0 +1,590 @@
+---
+description: "A comprehensive guide and workflow for integrating Next.js, Clerk, and Stripe to build SaaS applications with a Postgres database. Includes setup, configuration, code examples, and best practices."
+author: "Roo (AI Assistant)"
+version: "1.1"
+tags: ["nextjs", "clerk", "stripe", "saas", "postgres", "fullstack", "workflow", "guide", "integration", "typescript"]
+globs: ["/middleware.{js,ts}", "/app/api/**/*.ts", "/utils/db.ts", "/utils/stripe/config.ts", ".env.local"]
+---
+
+# Next.js, Clerk, and Stripe for SaaS Applications (with Postgres)
+
+*Objective:* This rule provides a comprehensive, step-by-step guide and reference for setting up a Software-as-a-Service (SaaS) application using Next.js (App Router), Clerk for authentication and user management, a standard Postgres database (e.g., hosted on Render), and Stripe for subscription management.
+
+*Roo Usage:* Roo SHOULD use this rule as a primary reference when assisting users in building SaaS applications with this stack. This includes generating code snippets, explaining configuration steps, troubleshooting integration issues, and advising on best practices.
+
+## I. Prerequisites and Initial Setup
+
+Before starting, ensure you have the following:
+
+*   *Node.js:* LTS version or higher.
+*   *Package Manager:* npm, yarn, or pnpm.
+*   *Clerk Account:* Create an account at [clerk.com](https://clerk.com) and set up a new application.
+    *   Note your Publishable Key and Secret Key.
+    *   Configure your desired sign-in methods (e.g., Email, Google, GitHub).
+*   *Stripe Account:* Create an account at [stripe.com](https://stripe.com).
+    *   Access your API keys (publishable and secret).
+    *   Set up your business details and branding in the Stripe dashboard.
+*   *Postgres Database:* A provisioned Postgres database. Services like [Render](https://render.com/), [Supabase](https://supabase.com/database), or [Neon](https://neon.tech/) are excellent choices.
+    *   Obtain the database connection URL.
+
+## II. Next.js & Clerk Project Initialization
+
+Bootstrap your Next.js application and integrate Clerk.
+
+1.  **Create Next.js App:**
+    ```bash
+    npx create-next-app@latest my-saas-app --ts --tailwind --eslint --app --src-dir
+    # Follow the prompts, selecting preferred options.
+    cd my-saas-app
+    ```
+2.  **Install Clerk:**
+    ```bash
+    npm install @clerk/nextjs
+    ```
+3.  **Follow the Clerk Next.js Quickstart:** The official Clerk documentation provides an excellent, up-to-date guide for initial setup. This typically involves:
+    *   Adding Clerk keys to `.env.local`.
+    *   Wrapping your root layout in `<ClerkProvider>`.
+    *   Creating a `middleware.ts` file to protect your application routes.
+    *   Creating sign-in, sign-up, and user profile pages provided by Clerk's components.
+
+## III. Stripe Integration for Subscriptions
+
+### 1. Install Stripe & DB Packages
+
+```bash
+npm install stripe
+npm install pg # Example: for node-postgres driver
+# or
+yarn add stripe pg
+# or
+pnpm add stripe pg
+```
+
+### 2. Configure Environment Variables
+
+Add your Stripe and Database credentials to `.env.local`:
+```env
+# Clerk Keys (already added during Clerk setup)
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+
+# Stripe Keys
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_... # For verifying webhook events
+
+# Database Connection URL
+DATABASE_URL="postgres://user:password@host:port/database"
+```
+*Security Note:* `CLERK_SECRET_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `DATABASE_URL` MUST NOT be prefixed with `NEXT_PUBLIC_` and are for server-side use only.
+
+### 3. Create Stripe Products and Prices
+
+In your Stripe Dashboard:
+1.  Go to "Products".
+2.  Click "+ Add product". Define your SaaS plans (e.g., Basic, Pro).
+3.  For each product, add pricing (recurring subscriptions). Note the Price ID (e.g., `price_xxxxxxxxxxxxxx`).
+
+### 4. Database Schema for Subscriptions (Postgres)
+
+It's essential to store subscription status in your database, synced with Stripe. Create a table, e.g., `user_subscriptions`:
+
+| Column Name             | Data Type     | Constraints                | Description                                     |
+| :---------------------- | :------------ | :------------------------- | :---------------------------------------------- |
+| id                      | uuid          | Primary Key, Default: gen_random_uuid() | Unique ID for the subscription record           |
+| clerk_user_id           | text          | Unique, Not Null           | Links to the Clerk user ID                      |
+| stripe_customer_id      | text          | Unique                     | Stripe Customer ID                              |
+| stripe_subscription_id  | text          | Unique                     | Stripe Subscription ID                          |
+| status                  | text          |                            | e.g., active, canceled, past_due, trialing|
+| current_period_ends_at  | timestamptz   |                            | When the current billing period ends            |
+| price_id                | text          |                            | Stripe Price ID of the subscribed plan          |
+| created_at              | timestamptz   | Default: now()             | Timestamp of creation                           |
+| updated_at              | timestamptz   | Default: now()             | Timestamp of last update                        |
+
+*SQL for creating the table (run in your Postgres DB console/client):*
+```sql
+CREATE TABLE public.user_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clerk_user_id TEXT UNIQUE NOT NULL,
+  stripe_customer_id TEXT UNIQUE,
+  stripe_subscription_id TEXT UNIQUE,
+  status TEXT,
+  current_period_ends_at TIMESTAMPTZ,
+  price_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Optional: Create a function to update updated_at timestamp automatically
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_user_subscriptions_updated_at
+BEFORE UPDATE ON public.user_subscriptions
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
+```
+
+### 5. Create Shared Utilities
+
+*Stripe Client:*
+`src/utils/stripe/config.ts`
+```typescript
+import Stripe from 'stripe'
+
+export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2024-04-10', // Use the latest API version
+  typescript: true,
+})
+```
+
+*Database Client (Example with `pg`):*
+`src/utils/db.ts`
+```typescript
+import { Pool } from 'pg';
+
+// Use a singleton pattern to avoid creating new connections on every request
+let pool: Pool;
+
+if (!pool) {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+  });
+}
+
+export const db = pool;
+```
+
+### 6. API Endpoint: Create Checkout Session
+
+`src/app/api/stripe/create-checkout-session/route.ts`
+```typescript
+import { NextResponse, NextRequest } from 'next/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
+import { stripe } from '@/utils/stripe/config'
+import { db } from '@/utils/db'
+
+export async function POST(req: NextRequest) {
+  const { userId } = auth()
+  const user = await currentUser()
+
+  if (!userId || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { priceId, quantity = 1, metadata = {} } = await req.json()
+
+  try {
+    // Check if user already has a Stripe customer ID
+    const { rows: userSubscriptionRows } = await db.query(
+      'SELECT stripe_customer_id FROM user_subscriptions WHERE clerk_user_id = $1',
+      [userId]
+    )
+
+    let customerId = userSubscriptionRows[0]?.stripe_customer_id
+
+    // If no customer ID exists, create one in Stripe and store it
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.primaryEmailAddress?.emailAddress,
+        name: user.fullName || undefined,
+        metadata: { clerkUserId: userId }, // Link Stripe customer to Clerk user
+      })
+      customerId = customer.id
+      // Save the new customer ID to your database
+      await db.query(
+        'INSERT INTO user_subscriptions (clerk_user_id, stripe_customer_id) VALUES ($1, $2) ON CONFLICT (clerk_user_id) DO UPDATE SET stripe_customer_id = $2',
+        [userId, customerId]
+      )
+    }
+    
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      billing_address_collection: 'required',
+      customer: customerId,
+      line_items: [
+        {
+          price: priceId,
+          quantity: quantity,
+        },
+      ],
+      mode: 'subscription',
+      allow_promotion_codes: true,
+      subscription_data: {
+        metadata: { clerkUserId: userId } // Link subscription to Clerk user
+      },
+      success_url: `${req.headers.get('origin')}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.headers.get('origin')}/subscribe`, // Your pricing page
+    })
+
+    return NextResponse.json({ sessionId: session.id })
+  } catch (error: any) {
+    console.error('Error creating checkout session:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+```
+
+### 7. API Endpoint: Create Customer Portal Session
+
+`src/app/api/stripe/create-portal-session/route.ts`
+```typescript
+import { NextResponse, NextRequest } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
+import { stripe } from '@/utils/stripe/config'
+import { db } from '@/utils/db'
+
+export async function POST(req: NextRequest) {
+  const { userId } = auth()
+
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
+    const { rows } = await db.query(
+      'SELECT stripe_customer_id FROM user_subscriptions WHERE clerk_user_id = $1',
+      [userId]
+    )
+
+    const customerId = rows[0]?.stripe_customer_id
+
+    if (!customerId) {
+      return NextResponse.json({ error: 'Stripe customer not found for this user.' }, { status: 404 })
+    }
+
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${req.headers.get('origin')}/account`, // Your account page
+    })
+
+    return NextResponse.json({ url: portalSession.url })
+  } catch (error: any) {
+    console.error('Error creating portal session:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+```
+
+### 8. API Endpoint: Stripe Webhooks
+
+This is critical for keeping your database in sync with Stripe.
+`src/app/api/stripe/webhooks/route.ts`
+```typescript
+import { NextResponse, NextRequest } from 'next/server'
+import { stripe } from '@/utils/stripe/config'
+import Stripe from 'stripe'
+import { db } from '@/utils/db'
+
+// Helper function to update or insert subscription data
+async function upsertSubscription(subscription: Stripe.Subscription) {
+    const clerkUserId = subscription.metadata?.clerkUserId;
+    if (!clerkUserId) {
+      console.error(`Missing clerkUserId in subscription metadata: ${subscription.id}`);
+      return;
+    }
+
+    const values = [
+      clerkUserId,
+      subscription.customer as string,
+      subscription.id,
+      subscription.status,
+      subscription.items.data[0].price.id,
+      new Date(subscription.current_period_end * 1000).toISOString(),
+    ];
+
+    const query = `
+      INSERT INTO user_subscriptions (
+        clerk_user_id, 
+        stripe_customer_id, 
+        stripe_subscription_id, 
+        status, 
+        price_id, 
+        current_period_ends_at
+      ) VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (stripe_subscription_id) DO UPDATE SET
+        status = EXCLUDED.status,
+        price_id = EXCLUDED.price_id,
+        current_period_ends_at = EXCLUDED.current_period_ends_at,
+        updated_at = NOW();
+    `;
+    
+    await db.query(query, values);
+}
+
+// Main webhook handler logic
+async function relevantEventsHandler(event: Stripe.Event) {
+  const { type, data } = event;
+  const object = data.object as any;
+
+  switch (type) {
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated':
+    case 'customer.subscription.deleted':
+      await upsertSubscription(object as Stripe.Subscription);
+      console.log(`Subscription ${type}: ${object.id}`);
+      break;
+
+    case 'checkout.session.completed':
+      const checkoutSession = object as Stripe.Checkout.Session;
+      if (checkoutSession.mode === 'subscription' && checkoutSession.subscription) {
+        const subscription = await stripe.subscriptions.retrieve(checkoutSession.subscription as string);
+        await upsertSubscription(subscription);
+        console.log(`Checkout session completed for subscription: ${subscription.id}`);
+      }
+      break;
+    
+    case 'invoice.payment_succeeded':
+      const invoice = object as Stripe.Invoice;
+      if (invoice.subscription) {
+        const subscriptionId = invoice.subscription as string;
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        await db.query(
+          `UPDATE user_subscriptions SET status = $1, current_period_ends_at = $2 WHERE stripe_subscription_id = $3`,
+          [subscription.status, new Date(subscription.current_period_end * 1000).toISOString(), subscriptionId]
+        );
+        console.log(`Invoice payment succeeded for subscription: ${subscriptionId}`);
+      }
+      break;
+
+    case 'invoice.payment_failed':
+      const failedInvoice = object as Stripe.Invoice;
+      if (failedInvoice.subscription) {
+         await db.query(
+          `UPDATE user_subscriptions SET status = 'past_due' WHERE stripe_subscription_id = $1`,
+          [failedInvoice.subscription as string]
+        );
+        console.log(`Invoice payment failed for subscription: ${failedInvoice.subscription}`);
+      }
+      break;
+
+    default:
+      console.log(`Unhandled Stripe event type: ${type}`);
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.text()
+  const sig = req.headers.get('stripe-signature') as string
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
+  let event: Stripe.Event
+
+  try {
+    if (!sig || !webhookSecret) {
+      console.error('Stripe webhook secret or signature not found.')
+      return NextResponse.json({ error: 'Webhook secret not configured.' }, { status: 400 })
+    }
+    event = stripe.webhooks.constructEvent(body, sig, webhookSecret)
+  } catch (err: any) {
+    console.error(`❌ Error message: ${err.message}`)
+    return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 })
+  }
+
+  console.log('✅ Stripe event received:', event.type, event.id)
+  
+  try {
+    await relevantEventsHandler(event);
+  } catch (error: any) {
+    console.error('Error handling webhook event:', error.message);
+    return NextResponse.json({ error: 'Webhook handler failed.' }, { status: 500 });
+  }
+
+  return NextResponse.json({ received: true })
+}
+
+// Disable body parsing for this route, as Stripe needs the raw body
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+}
+```
+*CRITICAL:*
+*   Ensure `clerkUserId` is passed in metadata when creating Stripe Checkout Sessions to link them back to your Clerk user.
+*   Test webhooks thoroughly using the Stripe CLI: `stripe listen --forward-to localhost:3000/api/stripe/webhooks`.
+
+## IV. Frontend Implementation Snippets
+
+`src/components/SubscriptionManager.tsx`
+```tsx
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useUser } from '@clerk/nextjs'
+
+// This component now fetches subscription data via a server action or API route for security.
+// For this example, we assume you have a server action `getSubscription`.
+// To implement this, create an `actions.ts` file.
+
+// Assume you have a Price ID for your main subscription plan
+const SUBSCRIPTION_PRICE_ID = 'price_YOUR_STRIPE_PRICE_ID' 
+
+export default function SubscriptionManager() {
+  const { user, isLoaded } = useUser()
+  const [subscription, setSubscription] = useState<any | null>(null) // Define a proper type for subscription
+  const [isLoading, setIsLoading] = useState(false)
+  const [isDataLoading, setIsDataLoading] = useState(true);
+
+  useEffect(() => {
+    if (isLoaded && user) {
+      // Fetch subscription data from your backend.
+      // This could be a server action or a dedicated API route.
+      const fetchSubscription = async () => {
+        try {
+          // Example: calling a local API route that queries the DB
+          const response = await fetch('/api/user/subscription');
+          if (response.ok) {
+            const subData = await response.json();
+            setSubscription(subData);
+          } else {
+             setSubscription(null);
+          }
+        } catch (error) {
+          console.error('Error fetching subscription:', error)
+        } finally {
+            setIsDataLoading(false);
+        }
+      }
+      fetchSubscription()
+    } else if (isLoaded) {
+        setIsDataLoading(false);
+    }
+  }, [isLoaded, user])
+
+  const handleSubscribe = async () => {
+    if (!user) return alert('Please log in to subscribe.')
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceId: SUBSCRIPTION_PRICE_ID }),
+      })
+      const { sessionId, error } = await response.json()
+      if (error) throw new Error(error)
+
+      const stripe = (await import('@stripe/stripe-js')).loadStripe(
+        process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
+      )
+      if (!stripe) throw new Error('Stripe.js not loaded')
+      
+      await stripe.redirectToCheckout({ sessionId })
+    } catch (error: any) {
+      alert(`Error: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleManageSubscription = async () => {
+    if (!user || !subscription) return alert('No active subscription found.')
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/stripe/create-portal-session', {
+        method: 'POST',
+      })
+      const { url, error } = await response.json()
+      if (error) throw new Error(error)
+      window.location.href = url
+    } catch (error: any) {
+      alert(`Error: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+  
+  if (!isLoaded || isDataLoading) return <p>Loading user data...</p>
+
+  if (!user) return <p>Please log in.</p>
+
+  return (
+    <div>
+      <h2>Subscription Status</h2>
+      {subscription && subscription.status === 'active' ? (
+        <div>
+          <p>Plan: Active</p>
+          <p>Renews on: {new Date(subscription.current_period_ends_at).toLocaleDateString()}</p>
+          <button onClick={handleManageSubscription} disabled={isLoading}>
+            {isLoading ? 'Loading...' : 'Manage Subscription'}
+          </button>
+        </div>
+      ) : (
+        <div>
+          <p>No active subscription.</p>
+          <button onClick={handleSubscribe} disabled={isLoading}>
+            {isLoading ? 'Loading...' : 'Subscribe Now'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+## V. Deployment Considerations
+
+*   *Environment Variables:* Securely set all `CLERK_...`, `STRIPE_...`, and `DATABASE_URL` variables on your hosting platform (e.g., Vercel, Netlify).
+*   *Stripe Webhook Endpoint:* In your Stripe Dashboard (Developers -> Webhooks), add an endpoint for your deployed application: `https://yourdomain.com/api/stripe/webhooks`. Select the events you want to listen to (e.g., `customer.subscription.*`, `checkout.session.completed`, `invoice.payment_*`).
+*   *Clerk URLs:* Ensure your production URLs are correctly configured in the Clerk dashboard under "Domains & URLs".
+
+## VI. Best Practices and .clinerule Usage
+
+*   *Security:*
+    *   NEVER expose secret keys on the client-side.
+    *   Always validate user authentication (`auth()`) in server-side logic (API Routes, Server Actions).
+    *   Verify Stripe webhook signatures.
+    *   Secure your database with network policies if your hosting provider supports it.
+*   *Error Handling:* Implement robust error handling and logging for API routes and client-side operations.
+*   *Data Fetching:* For client components, fetch sensitive user data (like subscription status) through authenticated API routes or server actions, not by querying the DB from the client.
+*   *Roo Guidance:*
+    *   Roo SHOULD refer to specific sections of this rule when asked about parts of the integration.
+    *   Roo MUST emphasize secure handling of API keys, database credentials, and webhook secrets.
+    *   Roo SHOULD provide code snippets from this rule and explain their purpose within the Clerk/Stripe/Postgres stack.
+
+## VII. Mermaid Diagram - Simplified Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant NextApp as Next.js App (Client)
+    participant Clerk
+    participant NextAPI as Next.js API Routes
+    participant StripeAPI as Stripe API
+    participant PostgresDB as Postgres DB (Render)
+
+    User->>NextApp: Clicks Login
+    NextApp->>Clerk: Initiates Clerk sign-in flow
+    Clerk-->>User: Handles authentication (e.g., OAuth, Email)
+    User->>Clerk: Authenticates
+    Clerk-->>NextApp: User is authenticated, session is managed
+
+    User->>NextApp: Clicks Subscribe
+    NextApp->>NextAPI: POST /api/stripe/create-checkout-session
+    NextAPI->>Clerk: auth() to get userId
+    NextAPI->>PostgresDB: Get/Create Stripe Customer ID for user
+    NextAPI->>StripeAPI: Create Checkout Session (with clerkUserId in metadata)
+    StripeAPI-->>NextAPI: Returns sessionId
+    NextAPI-->>NextApp: Returns sessionId
+    NextApp->>StripeAPI: redirectToCheckout(sessionId)
+    User->>StripeAPI: Completes Payment on Stripe Page
+    StripeAPI-->>User: Redirects to success_url
+
+    StripeAPI->>NextAPI: POST /api/stripe/webhooks (e.g., checkout.session.completed)
+    NextAPI->>StripeAPI: Verifies webhook signature
+    NextAPI->>PostgresDB: Upserts subscription details (status, dates, etc.) using clerkUserId from metadata
+    PostgresDB-->>NextAPI: DB updated
+    NextAPI-->>StripeAPI: Returns 200 OK
+
+    User->>NextApp: Clicks Manage Subscription
+    NextApp->>NextAPI: POST /api/stripe/create-portal-session
+    NextAPI->>Clerk: auth() to get userId
+    NextAPI->>PostgresDB: Get Stripe Customer ID
+    NextAPI->>StripeAPI: Create Billing Portal Session
+    StripeAPI-->>NextAPI: Returns portal URL
+    NextAPI-->>NextApp: Returns portal URL
+    NextApp-->>User: Redirects to Stripe Billing Portal
