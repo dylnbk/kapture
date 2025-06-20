@@ -39,7 +39,7 @@ export function Skeleton({ className }: SkeletonProps) {
 
 export function CardSkeleton() {
   return (
-    <div className="bg-white/5 dark:bg-black/5 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-xl p-6 animate-pulse">
+    <div className="bg-white/5 dark:bg-black/5 backdrop-blur-md border border-gray-200/60 dark:border-white/20 rounded-xl p-6 animate-pulse">
       <div className="space-y-3">
         <Skeleton className="h-4 w-1/3" />
         <Skeleton className="h-8 w-1/2" />

@@ -18,7 +18,7 @@ const badgeVariants = cva(
         success:
           "border-transparent bg-light-success dark:bg-dark-success text-white",
         glass:
-          "border-white/20 dark:border-white/10 bg-white/10 dark:bg-black/10 backdrop-blur-sm text-light-text-primary dark:text-dark-text-primary",
+          "border-gray-200/60 dark:border-white/20 bg-white/10 dark:bg-black/10 backdrop-blur-sm text-light-text-primary dark:text-dark-text-primary",
       },
     },
     defaultVariants: {

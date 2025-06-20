@@ -151,7 +151,7 @@ export default function DownloadsPage() {
         {isLoading ? (
           <div className="space-y-4">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="bg-white/5 dark:bg-black/5 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-xl p-6 animate-pulse">
+              <div key={i} className="bg-white/5 dark:bg-black/5 backdrop-blur-md border border-gray-200/60 dark:border-white/20 rounded-xl p-6 animate-pulse">
                 <div className="flex items-center space-x-4">
                   <div className="h-16 w-16 bg-light-text-secondary/20 dark:bg-dark-text-secondary/20 rounded"></div>
                   <div className="flex-1 space-y-2">
@@ -172,7 +172,7 @@ export default function DownloadsPage() {
                 <button
                   onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                   disabled={currentPage === 1}
-                  className="px-4 py-2 text-sm bg-white/5 dark:bg-black/5 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/10 dark:hover:bg-black/10 transition-colors"
+                  className="px-4 py-2 text-sm bg-white/5 dark:bg-black/5 backdrop-blur-md border border-gray-200/60 dark:border-white/20 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/10 dark:hover:bg-black/10 transition-colors"
                 >
                   Previous
                 </button>
@@ -182,7 +182,7 @@ export default function DownloadsPage() {
                 <button
                   onClick={() => setCurrentPage(Math.min(meta.totalPages, currentPage + 1))}
                   disabled={currentPage === meta.totalPages}
-                  className="px-4 py-2 text-sm bg-white/5 dark:bg-black/5 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/10 dark:hover:bg-black/10 transition-colors"
+                  className="px-4 py-2 text-sm bg-white/5 dark:bg-black/5 backdrop-blur-md border border-gray-200/60 dark:border-white/20 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/10 dark:hover:bg-black/10 transition-colors"
                 >
                   Next
                 </button>

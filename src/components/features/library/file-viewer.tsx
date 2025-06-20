@@ -110,11 +110,13 @@ export function FileViewer({ file, open, onOpenChange, onDownload }: FileViewerP
     switch (actualFileType) {
       case 'image':
         return (
-          <div className="relative w-full h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden">
+          <div className="relative w-full h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden p-4 pb-16">
             <div
-              className="relative transition-transform duration-200 max-w-full max-h-full"
+              className="relative transition-transform duration-200 flex items-center justify-center"
               style={{
                 transform: `scale(${imageZoom / 100}) rotate(${imageRotation}deg)`,
+                maxWidth: '100%',
+                maxHeight: '100%'
               }}
             >
               <Image
@@ -122,13 +124,13 @@ export function FileViewer({ file, open, onOpenChange, onDownload }: FileViewerP
                 alt={fileName}
                 width={800}
                 height={600}
-                className="object-contain w-full h-full max-w-[80vh] max-h-[60vh]"
+                className="object-contain max-w-full max-h-full"
                 unoptimized
                 style={{
-                  maxWidth: '100%',
-                  maxHeight: '100%',
                   width: 'auto',
-                  height: 'auto'
+                  height: 'auto',
+                  maxWidth: '100%',
+                  maxHeight: 'calc(70vh - 5rem)'
                 }}
               />
             </div>
@@ -158,7 +160,9 @@ export function FileViewer({ file, open, onOpenChange, onDownload }: FileViewerP
               >
                 <RotateCw className="h-4 w-4" />
               </Button>
-              <Badge variant="secondary">{imageZoom}%</Badge>
+              <Button variant="secondary" size="sm" className="cursor-default pointer-events-none">
+                {imageZoom}%
+              </Button>
             </div>
           </div>
         );

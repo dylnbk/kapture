@@ -354,7 +354,7 @@ export function DownloadHistory({ downloads }: DownloadHistoryProps) {
                       setSelectedItems(selectedItems.filter(id => id !== download.id));
                     }
                   }}
-                  className="rounded border-white/20 dark:border-white/10 bg-white/10 dark:bg-black/10"
+                  className="rounded border-gray-200/60 dark:border-white/20 bg-white/10 dark:bg-black/10"
                 />
               </div>
             )}

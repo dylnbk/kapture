@@ -20,7 +20,7 @@ const buttonVariants = cva(
         link:
           "text-primary underline-offset-4 hover:underline",
         glass:
-          "bg-white/10 dark:bg-black/10 backdrop-blur-md border border-white/20 dark:border-white/10 text-foreground hover:bg-white/20 dark:hover:bg-black/20",
+          "bg-white/10 dark:bg-black/10 backdrop-blur-md border border-gray-200/60 dark:border-white/20 text-foreground hover:bg-white/20 dark:hover:bg-black/20",
         success:
           "bg-green-600 text-white hover:bg-green-600/90",
       },

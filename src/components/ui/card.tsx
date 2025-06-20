@@ -15,9 +15,9 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
           "rounded-xl border border-border transition-all duration-200",
           {
             // Variant styles
-            "bg-white/5 dark:bg-black/5 backdrop-blur-md border-white/20 dark:border-white/10 hover:bg-white/10 dark:hover:bg-black/10": variant === "glass",
+            "bg-white/5 dark:bg-black/5 backdrop-blur-md border-gray-200/60 dark:border-white/20 hover:bg-white/10 dark:hover:bg-black/10": variant === "glass",
             "bg-card text-card-foreground shadow-sm hover:shadow-md": variant === "default",
-            "bg-white/10 dark:bg-black/10 backdrop-blur-lg border-white/30 dark:border-white/20 shadow-xl hover:shadow-2xl": variant === "elevated",
+            "bg-white/10 dark:bg-black/10 backdrop-blur-lg border-gray-200/80 dark:border-white/20 shadow-xl hover:shadow-2xl": variant === "elevated",
             // Size styles
             "p-4": size === "sm",
             "p-6": size === "md",

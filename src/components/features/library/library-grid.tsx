@@ -171,17 +171,17 @@ export function LibraryGrid({ items }: LibraryGridProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-6">
       {items.map((item) => (
-        <Card key={item.id} className="group hover:shadow-lg transition-all duration-200 bg-white/5 dark:bg-black/5 backdrop-blur-md border border-white/20 dark:border-white/10">
+        <Card key={item.id} className="group hover:shadow-lg transition-all duration-200 bg-white/5 dark:bg-black/5 backdrop-blur-md border border-gray-200/60 dark:border-white/20">
           <CardContent className="p-4">
             <div className="space-y-3">
               {/* Thumbnail */}
-              <div className="relative aspect-video bg-light-background-secondary dark:bg-dark-background-secondary rounded-lg overflow-hidden">
+              <div className="relative aspect-square bg-light-background-secondary dark:bg-dark-background-secondary rounded-lg overflow-hidden">
                 {(item.thumbnail || item.metadata?.thumbnail) ? (
                   <Image
                     src={item.thumbnail || item.metadata?.thumbnail}
                     alt={item.trend?.title || item.title || item.metadata?.title || "Content thumbnail"}
                     fill
-                    className="object-cover"
+                    className="object-contain"
                     unoptimized
                   />
                 ) : (

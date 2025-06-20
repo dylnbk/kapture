@@ -85,7 +85,7 @@ export default function ScrapingPage() {
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-white/5 dark:bg-black/5 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-xl p-6 animate-pulse">
+            <div key={i} className="bg-white/5 dark:bg-black/5 backdrop-blur-md border border-gray-200/60 dark:border-white/20 rounded-xl p-6 animate-pulse">
               <div className="space-y-3">
                 <div className="h-4 bg-light-text-secondary/20 dark:bg-dark-text-secondary/20 rounded w-3/4"></div>
                 <div className="h-32 bg-light-text-secondary/20 dark:bg-dark-text-secondary/20 rounded"></div>
